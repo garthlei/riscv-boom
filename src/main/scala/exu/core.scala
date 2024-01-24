@@ -244,14 +244,14 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
   // Uarch Hardware Performance Events (HPEs)
 
-  val perfEvents = new freechips.rocketchip.rocket.EventSets(Seq(
-    new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
+  val perfEvents = new freechips.rocketchip.rocket.SuperscalarEventSets(Seq(
+    (Seq(new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
       ("exception", () => rob.io.com_xcpt.valid),
       ("nop",       () => false.B),
       ("nop",       () => false.B),
-      ("nop",       () => false.B))),
+      ("nop",       () => false.B)))), _ + _),
 
-    new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
+    (Seq(new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
 //      ("I$ blocked",                        () => icache_blocked),
       ("nop",                               () => false.B),
       // ("branch misprediction",              () => br_unit.brinfo.mispredict),
@@ -259,15 +259,19 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
       //                                             br_unit.brinfo.cfi_type === CFI_JALR),
       ("flush",                             () => rob.io.flush.valid)
       //("branch resolved",                   () => br_unit.brinfo.valid)
-    )),
+    ))), _ + _),
 
-    new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
+    (Seq(new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
       ("I$ miss",     () => io.ifu.perf.acquire),
       ("D$ miss",     () => io.lsu.perf.acquire),
       ("D$ release",  () => io.lsu.perf.release),
       ("ITLB miss",   () => io.ifu.perf.tlbMiss),
       ("DTLB miss",   () => io.lsu.perf.tlbMiss),
-      ("L2 TLB miss", () => io.ptw.perf.l2miss)))))
+      ("L2 TLB miss", () => io.ptw.perf.l2miss)))), _ + _),
+    
+    (RegNext(rob.io.commit.arch_valids).zipWithIndex map { case (v, i) =>
+      new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
+        (s"inst count ${i}", () => v))) }, 0.U(retireWidth.W) + _ + _)))
   val csr = Module(new freechips.rocketchip.rocket.CSRFile(perfEvents, boomParams.customCSRs.decls))
   csr.io.inst foreach { c => c := DontCare }
   csr.io.rocc_interrupt := io.rocc.interrupt
