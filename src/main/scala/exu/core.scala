@@ -245,18 +245,27 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
   // Uarch Hardware Performance Events (HPEs)
 
   val perfEvents = new freechips.rocketchip.rocket.SuperscalarEventSets(Seq(
-    (Seq(new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
-      ("exception", () => rob.io.com_xcpt.valid),
-      ("nop",       () => false.B),
-      ("nop",       () => false.B),
-      ("nop",       () => false.B)))), _ + _),
+    ((rob.io.commit.arch_valids zip rob.io.commit.uops) map { case (v, u) =>
+      new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
+        ("exception", () => v && u.exception),
+        ("nop", () => false.B),
+        ("nop", () => false.B),
+        ("nop", () => false.B),
+        ("nop", () => false.B),
+        ("nop", () => false.B),
+        ("branch", () => v && u.is_br),
+        ("nop", () => false.B),
+        ("nop", () => false.B),
+      )) }, 0.U(retireWidth.W) + _ + _),
 
     (Seq(new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
-//      ("I$ blocked",                        () => icache_blocked),
+      ("nop", () => false.B),
+      ("nop", () => false.B),
+      ("nop", () => false.B),
+      ("I$ blocked",                        () => icache_blocked),
       ("nop",                               () => false.B),
-      // ("branch misprediction",              () => br_unit.brinfo.mispredict),
-      // ("control-flow target misprediction", () => br_unit.brinfo.mispredict &&
-      //                                             br_unit.brinfo.cfi_type === CFI_JALR),
+      ("branch misprediction",              () => brupdate.b1.mispredict_mask =/= 0.U || brupdate.b2.mispredict),
+      ("control-flow target misprediction", () => brupdate.b2.mispredict && brupdate.b2.cfi_type === CFI_JALR),
       ("flush",                             () => rob.io.flush.valid)
       //("branch resolved",                   () => br_unit.brinfo.valid)
     ))), _ + _),
@@ -281,8 +290,8 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
 
   (custom_csrs.csrs zip csr.io.customCSRs).map { case (lhs, rhs) => lhs <> rhs }
 
-  //val icache_blocked = !(io.ifu.fetchpacket.valid || RegNext(io.ifu.fetchpacket.valid))
-  val icache_blocked = false.B
+  val icache_blocked = !(io.ifu.fetchpacket.valid || RegNext(io.ifu.fetchpacket.valid))
+  // val icache_blocked = false.B
   csr.io.counters foreach { c => c.inc := RegNext(perfEvents.evaluate(c.eventSel)) }
 
   //****************************************
