@@ -280,8 +280,11 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
     
     (RegNext(rob.io.commit.arch_valids).zipWithIndex map { case (v, i) =>
       new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
-        (s"inst count ${i}", () => v))) }, 0.U(retireWidth.W) + _ + _)))
-  val csr = Module(new freechips.rocketchip.rocket.CSRFile(perfEvents, boomParams.customCSRs.decls))
+        (s"inst count ${i}", () => v))) }, 0.U(retireWidth.W) + _ + _),
+        
+    (Seq(new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
+      ("cycle count",     () => !csr.io.csr_stall)))), _ + _)))
+  val csr: freechips.rocketchip.rocket.CSRFile = Module(new freechips.rocketchip.rocket.CSRFile(perfEvents, boomParams.customCSRs.decls))
   csr.io.inst foreach { c => c := DontCare }
   csr.io.rocc_interrupt := io.rocc.interrupt
 
